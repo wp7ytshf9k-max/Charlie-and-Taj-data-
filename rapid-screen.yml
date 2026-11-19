@@ -1,0 +1,32 @@
+name: Charlie Taj Rapid Screen
+on:
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: 'YYYY-MM-DD (leave blank for today UTC)'
+        required: false
+        type: string
+  schedule:
+    - cron: '15 7 * * *'
+permissions:
+  contents: read
+jobs:
+  screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Screen fixtures
+        env:
+          TARGET_DATE: ${{ inputs.target_date }}
+        run: |
+          if [ -z "$TARGET_DATE" ]; then export TARGET_DATE="$(date -u +%F)"; fi
+          python screen.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapid-screen-output
+          path: output/
