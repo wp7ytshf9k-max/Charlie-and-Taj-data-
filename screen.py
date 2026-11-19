@@ -1,4 +1,4 @@
-"""Charlie & Taj rapid research screen v2: preliminary ranking, NOT betting approval."""
+"""Charlie & Taj rapid research screen v2.1: preliminary ranking, NOT betting approval."""
 import csv, io, json, os, re, urllib.request
 from collections import defaultdict
 from datetime import date, datetime
@@ -10,7 +10,7 @@ datetime.strptime(TARGET, '%Y-%m-%d')
 OUT = Path('output'); OUT.mkdir(exist_ok=True)
 
 def get(path):
-    req = urllib.request.Request(BASE + path, headers={'User-Agent':'CharlieTajResearch/2.0'})
+    req = urllib.request.Request(BASE + path, headers={'User-Agent':'CharlieTajResearch/2.1'})
     with urllib.request.urlopen(req, timeout=35) as response:
         return response.read().decode('utf-8-sig')
 
@@ -104,9 +104,16 @@ def fixture_key(r):
 def pick(pool,count,outcome=None,reverse=False):
     choices = [r for r in eligible if (outcome is None or r['outcome']==outcome) and fixture_key(r) not in used]
     choices.sort(key=lambda r:(float(r['rapid_score']),r['competition'],r['home'],r['away']),reverse=not reverse)
-    for r in choices[:count]:
+    picked = 0
+    for r in choices:
+        key = fixture_key(r)
+        if key in used:
+            continue  # Another outcome from this fixture may already have been picked in this pool.
         selected.append({'pool':pool,**r})
-        used.add(fixture_key(r))
+        used.add(key)
+        picked += 1
+        if picked >= count:
+            break
 
 # 47 slots are a TARGET, not a requirement to fabricate candidates.
 pick('Builder',3)
@@ -123,13 +130,16 @@ with (OUT/'shortlist.csv').open('w',newline='',encoding='utf-8') as f:
 with (OUT/'all_outcomes.csv').open('w',newline='',encoding='utf-8') as f:
     writer=csv.DictWriter(f,fieldnames=fields[1:]);writer.writeheader();writer.writerows(outcomes)
 counts={pool:sum(r['pool']==pool for r in selected) for pool in ['Builder','Master','Moonshot research','Backup']}
-summary={'date':TARGET,'version':'rapid-screen-v2','competitions_discovered':len(folders),
+summary={'date':TARGET,'version':'rapid-screen-v2.1','competitions_discovered':len(folders),
     'competitions_failed':len(errors),'fixtures_loaded':len(fixtures),
     'outcomes_generated':len(outcomes),'outcomes_with_last7':len(eligible),
     'shortlist_count':len(selected),'target_count':47,'target_filled':len(selected)==47,
     'pool_counts':counts,'duplicate_fixtures_in_shortlist':len(selected)-len(used),
+    'unique_shortlist_fixtures':len(used),
     'green_gates':0,'source_scope':'Open Matchday only; NOT worldwide 368-fixture coverage',
     'note':'Form7 ranking is a heuristic, NOT a calibrated 1X2 probability. No validated moonshot odds/EV or Sky Bet checks. All QC gates NOT_ASSESSED.',
     'errors':errors}
+if len(selected) != len(used):
+    raise RuntimeError('QC FAILURE: duplicate fixtures in shortlist')
 (OUT/'summary.json').write_text(json.dumps(summary,indent=2),encoding='utf-8')
 print(json.dumps(summary,indent=2))
